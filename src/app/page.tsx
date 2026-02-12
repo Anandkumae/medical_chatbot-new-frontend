@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, Heart, Stethoscope, MessageCircle, Sun, Moon } from 'lucide-react';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { ThemeTest } from '@/components/ThemeTest';
+import { Send, Heart, Stethoscope, MessageCircle, Sun, Moon, Activity } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { GuidedAssessment } from '@/components/GuidedAssessment';
+import { AssessmentProvider } from '@/contexts/AssessmentContext';
+import { LanguageProvider, useLanguage } from '@/contexts/LanguageContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { VoiceInput } from '@/components/VoiceInput';
 
 interface Message {
   id: string;
@@ -13,15 +16,20 @@ interface Message {
   timestamp: Date;
 }
 
-export default function MedicalChatbot() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+function MedicalChatbotContent() {
+  const { theme: contextTheme } = useTheme();
+  const { language, translate } = useLanguage();
+  const [mode, setMode] = useState<'free' | 'guided'>('guided'); // Default to guided
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Simple theme toggle without context for now
+  // Local theme state for this component (since ThemeContext doesn't expose setTheme)
+  const [theme, setTheme] = useState<'light' | 'dark'>(contextTheme);
+
+  // Simple theme toggle
   const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    setTheme((prev: 'light' | 'dark') => prev === 'light' ? 'dark' : 'light');
   };
 
   const sendMessage = async () => {
@@ -35,6 +43,7 @@ export default function MedicalChatbot() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input.trim();
     setInput('');
     setIsLoading(true);
 
@@ -44,7 +53,10 @@ export default function MedicalChatbot() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ 
+          message: currentInput,
+          language: language 
+        }),
       });
 
       const data = await response.json();
@@ -68,6 +80,10 @@ export default function MedicalChatbot() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleVoiceTranscript = (transcript: string) => {
+    setInput(transcript);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -151,7 +167,7 @@ export default function MedicalChatbot() {
                     color: theme === 'light' ? '#111827' : '#f9fafb'
                   }}
                 >
-                  Medical Assistant
+                  {translate('app.title')}
                 </h1>
                 <p 
                   className="text-xs sm:text-sm transition-colors duration-300"
@@ -159,38 +175,75 @@ export default function MedicalChatbot() {
                     color: theme === 'light' ? '#6b7280' : '#9ca3af'
                   }}
                 >
-                  Your AI-powered health companion
+                  {translate('app.subtitle')}
                 </p>
               </div>
             </div>
-            <button
-              onClick={toggleTheme}
-              className="p-1.5 sm:p-2 rounded-lg transition-all duration-200 ease-in-out group"
-              style={{
-                backgroundColor: theme === 'light' ? '#f3f4f6' : '#1f2937',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'light' ? '#e5e7eb' : '#374151';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'light' ? '#f3f4f6' : '#1f2937';
-              }}
-              aria-label="Toggle theme"
-              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            >
-              <div className="relative w-4 h-4 sm:w-5 sm:h-5">
-                <Sun 
-                  className={`absolute inset-0 w-4 h-4 sm:w-5 sm:h-5 text-amber-600 transition-all duration-200 ${
-                    theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-90 scale-0'
-                  }`} 
-                />
-                <Moon 
-                  className={`absolute inset-0 w-4 h-4 sm:w-5 sm:h-5 text-blue-600 transition-all duration-200 ${
-                    theme === 'dark' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-0'
-                  }`} 
-                />
+            <div className="flex items-center gap-2">
+              {/* Language Selector */}
+              <LanguageSelector />
+              
+              {/* Mode Toggle */}
+              <div 
+                className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1"
+                style={{
+                  backgroundColor: theme === 'light' ? '#f3f4f6' : '#374151'
+                }}
+              >
+                <button
+                  onClick={() => setMode('guided')}
+                  className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
+                    mode === 'guided' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">{translate('mode.guided')}</span>
+                </button>
+                <button
+                  onClick={() => setMode('free')}
+                  className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
+                    mode === 'free' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">{translate('mode.free')}</span>
+                </button>
               </div>
-            </button>
+              
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-1.5 sm:p-2 rounded-lg transition-all duration-200 ease-in-out group"
+                style={{
+                  backgroundColor: theme === 'light' ? '#f3f4f6' : '#1f2937',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme === 'light' ? '#e5e7eb' : '#374151';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme === 'light' ? '#f3f4f6' : '#1f2937';
+                }}
+                aria-label="Toggle theme"
+                title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              >
+                <div className="relative w-4 h-4 sm:w-5 sm:h-5">
+                  <Sun 
+                    className={`absolute inset-0 w-4 h-4 sm:w-5 sm:h-5 text-amber-600 transition-all duration-200 ${
+                      theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-90 scale-0'
+                    }`} 
+                  />
+                  <Moon 
+                    className={`absolute inset-0 w-4 h-4 sm:w-5 sm:h-5 text-blue-600 transition-all duration-200 ${
+                      theme === 'dark' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-0'
+                    }`} 
+                  />
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -324,7 +377,7 @@ export default function MedicalChatbot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Describe your symptoms..."
+                placeholder={translate('chat.placeholder')}
                 className="flex-1 px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-300 text-sm sm:text-base"
                 style={{
                   border: `1px solid ${theme === 'light' ? '#d1d5db' : '#4b5563'}`,
@@ -332,6 +385,11 @@ export default function MedicalChatbot() {
                   color: theme === 'light' ? '#111827' : '#f9fafb'
                 }}
                 disabled={isLoading}
+              />
+              <VoiceInput 
+                onTranscript={handleVoiceTranscript}
+                disabled={isLoading}
+                theme={theme}
               />
               <button
                 onClick={sendMessage}
@@ -377,9 +435,14 @@ export default function MedicalChatbot() {
           </p>
         </div>
       </main>
-      
-      {/* Debug Theme Test Component */}
-      <ThemeTest theme={theme} toggleTheme={toggleTheme} />
     </div>
+  );
+}
+
+export default function MedicalChatbot() {
+  return (
+    <LanguageProvider>
+      <MedicalChatbotContent />
+    </LanguageProvider>
   );
 }
